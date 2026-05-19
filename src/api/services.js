@@ -17,6 +17,13 @@ export const productService = {
   remove: (id) => api.delete(`/api/product/${id}`).then(unwrap),
 };
 
+export const serviceService = {
+  list: () => api.get("/api/service").then(unwrap),
+  create: (payload) => api.post("/api/service", payload).then(unwrap),
+  update: (id, payload) => api.put(`/api/service/${id}`, payload).then(unwrap),
+  remove: (id) => api.delete(`/api/service/${id}`).then(unwrap),
+};
+
 export const categoryService = {
   list: () => api.get("/api/category").then(unwrap),
   create: (payload) => api.post("/api/category", payload).then(unwrap),
@@ -47,9 +54,9 @@ export const reviewService = {
 
 export const orderService = {
   list: () => api.get("/api/order").then(unwrap),
-  create: (payload) => api.post("/api/order", payload).then(unwrap),
   update: (id, payload) => api.put(`/api/order/${id}`, payload).then(unwrap),
   remove: (id) => api.delete(`/api/order/${id}`).then(unwrap),
+  cancel: (id) => api.patch(`/api/order/${id}/cancel`).then(unwrap),
   assignDelivery: (id, payload) =>
     api.patch(`/api/order/${id}/assign-delivery`, payload).then(unwrap),
   updateExpectedDelivery: (id, payload) =>

@@ -1,19 +1,5 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { orderService } from "../api/services";
-
-const emptyOrderForm = {
-  user: "",
-  orderItems: '[{"product":"","title":"","quantity":1,"price":0}]',
-  shippingAddress:
-    '{"fullName":"","phone":"","addressLine":"","city":"","state":"","pincode":"","country":"India"}',
-  itemsPrice: 0,
-  taxPrice: 0,
-  shippingPrice: 0,
-  discountPrice: 0,
-  totalPrice: 0,
-  paymentMethod: "COD",
-  orderStatus: "PLACED",
-};
 
 const statusOptions = [
   "PLACED",
@@ -28,13 +14,7 @@ const statusOptions = [
   "REFUNDED",
 ];
 
-const parseJsonSafe = (value, fallback) => {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-};
+const PAYMENT_METHODS = ["RAZORPAY", "UPI", "CARD", "NETBANKING"];
 
 const normalizeRows = (result) => {
   if (Array.isArray(result)) return result;
@@ -42,11 +22,33 @@ const normalizeRows = (result) => {
   return [];
 };
 
+const formatAddress = (address) => {
+  if (!address || typeof address !== "object") return "-";
+  const parts = [
+    address.fullName,
+    address.addressLine,
+    [address.city, address.state, address.pincode].filter(Boolean).join(", "),
+    address.country,
+    address.phone ? `Phone: ${address.phone}` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || "-";
+};
+
+const lineItemLabel = (item) => {
+  const type = item.itemType === "service" || item.service ? "Service" : "Product";
+  const title =
+    item.title ||
+    item.product?.title ||
+    item.service?.title ||
+  "Untitled";
+  return `[${type}] ${title} × ${item.quantity || 1} — ₹${item.price ?? 0}`;
+};
+
 const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState(emptyOrderForm);
+  const [expandedId, setExpandedId] = useState(null);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -65,30 +67,19 @@ const OrdersPage = () => {
     loadOrders();
   }, []);
 
-  const createOrder = async (event) => {
-    event.preventDefault();
-    setError("");
+  const updateStatus = async (orderId, orderStatus) => {
     try {
-      await orderService.create({
-        ...form,
-        itemsPrice: Number(form.itemsPrice),
-        taxPrice: Number(form.taxPrice),
-        shippingPrice: Number(form.shippingPrice),
-        discountPrice: Number(form.discountPrice),
-        totalPrice: Number(form.totalPrice),
-        orderItems: parseJsonSafe(form.orderItems, []),
-        shippingAddress: parseJsonSafe(form.shippingAddress, {}),
-      });
-      setForm(emptyOrderForm);
+      await orderService.update(orderId, { orderStatus });
       await loadOrders();
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
     }
   };
 
-  const updateStatus = async (orderId, orderStatus) => {
+  const cancelOrder = async (orderId) => {
+    if (!window.confirm("Cancel this order?")) return;
     try {
-      await orderService.update(orderId, { orderStatus });
+      await orderService.cancel(orderId);
       await loadOrders();
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
@@ -140,150 +131,146 @@ const OrdersPage = () => {
         <h1>Orders</h1>
         <button onClick={loadOrders}>Refresh</button>
       </div>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Orders are placed from the storefront checkout (Razorpay). Manage status, delivery, and
+        cancellations here.
+      </p>
       {error && <p className="error">{error}</p>}
 
-      <div className="grid-two">
-        <form className="card form-grid" onSubmit={createOrder}>
-          <h3>Create Order</h3>
-          <label>
-            User Id
-            <input
-              value={form.user}
-              onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
-              required
-            />
-          </label>
-          <label>
-            Order Items JSON
-            <textarea
-              rows={5}
-              value={form.orderItems}
-              onChange={(e) => setForm((prev) => ({ ...prev, orderItems: e.target.value }))}
-            />
-          </label>
-          <label>
-            Shipping Address JSON
-            <textarea
-              rows={5}
-              value={form.shippingAddress}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, shippingAddress: e.target.value }))
-              }
-            />
-          </label>
-          <label>
-            Items Price
-            <input
-              type="number"
-              value={form.itemsPrice}
-              onChange={(e) => setForm((prev) => ({ ...prev, itemsPrice: e.target.value }))}
-              required
-            />
-          </label>
-          <label>
-            Tax Price
-            <input
-              type="number"
-              value={form.taxPrice}
-              onChange={(e) => setForm((prev) => ({ ...prev, taxPrice: e.target.value }))}
-            />
-          </label>
-          <label>
-            Shipping Price
-            <input
-              type="number"
-              value={form.shippingPrice}
-              onChange={(e) => setForm((prev) => ({ ...prev, shippingPrice: e.target.value }))}
-            />
-          </label>
-          <label>
-            Discount Price
-            <input
-              type="number"
-              value={form.discountPrice}
-              onChange={(e) => setForm((prev) => ({ ...prev, discountPrice: e.target.value }))}
-            />
-          </label>
-          <label>
-            Total Price
-            <input
-              type="number"
-              value={form.totalPrice}
-              onChange={(e) => setForm((prev) => ({ ...prev, totalPrice: e.target.value }))}
-              required
-            />
-          </label>
-          <label>
-            Payment Method
-            <input
-              value={form.paymentMethod}
-              onChange={(e) => setForm((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-              required
-            />
-          </label>
-          <button type="submit">Create Order</button>
-        </form>
-
-        <div className="card table-wrap">
-          <h3>Order List</h3>
-          {loading ? (
-            <p>Loading...</p>
-          ) : (
-            <table>
-              <thead>
+      <div className="card table-wrap">
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Invoice</th>
+                <th>Customer</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Payment</th>
+                <th>Paid</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => {
+                const items = Array.isArray(order.orderItems) ? order.orderItems : [];
+                const expanded = expandedId === order._id;
+                return (
+                  <Fragment key={order._id}>
+                    <tr>
+                      <td>{order.invoiceNumber || order._id?.slice(-8) || "-"}</td>
+                      <td>{order.user?.email || order.user?.name || "-"}</td>
+                      <td>{items.length}</td>
+                      <td>₹{order.totalPrice ?? 0}</td>
+                      <td>
+                        <select
+                          value={order.orderStatus || "PLACED"}
+                          onChange={(e) => updateStatus(order._id, e.target.value)}
+                        >
+                          {statusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            PAYMENT_METHODS.includes(order.paymentMethod)
+                              ? ""
+                              : "error"
+                          }
+                        >
+                          {order.paymentMethod || "-"}
+                        </span>
+                      </td>
+                      <td>{order.isPaid ? "Yes" : "No"}</td>
+                      <td className="row" style={{ flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setExpandedId(expanded ? null : order._id)}
+                        >
+                          {expanded ? "Hide" : "Details"}
+                        </button>
+                        {order.orderStatus !== "CANCELLED" && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => cancelOrder(order._id)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => assignDelivery(order._id)}
+                        >
+                          Delivery
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => updateExpectedDelivery(order._id)}
+                        >
+                          ETA
+                        </button>
+                        <button type="button" className="danger" onClick={() => deleteOrder(order._id)}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded && (
+                      <tr key={`${order._id}-detail`}>
+                        <td colSpan={8}>
+                          <div
+                            style={{
+                              padding: "12px 8px",
+                              background: "var(--surface-muted, #f8fafc)",
+                              borderRadius: 8,
+                            }}
+                          >
+                            <p>
+                              <strong>Shipping:</strong> {formatAddress(order.shippingAddress)}
+                            </p>
+                            <p style={{ marginTop: 8 }}>
+                              <strong>Line items:</strong>
+                            </p>
+                            <ul style={{ margin: "6px 0 0 18px" }}>
+                              {items.map((item, idx) => (
+                                <li key={idx}>{lineItemLabel(item)}</li>
+                              ))}
+                              {!items.length && <li>No items</li>}
+                            </ul>
+                            {(order.deliveryPartner || order.trackingId) && (
+                              <p style={{ marginTop: 8 }}>
+                                <strong>Delivery:</strong> {order.deliveryPartner || "-"} ·{" "}
+                                {order.trackingId || "-"}
+                                {order.expectedDeliveryDate
+                                  ? ` · ETA ${new Date(order.expectedDeliveryDate).toLocaleDateString()}`
+                                  : ""}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+              {!orders.length && (
                 <tr>
-                  <th>Invoice</th>
-                  <th>User</th>
-                  <th>Total</th>
-                  <th>Status</th>
-                  <th>Payment</th>
-                  <th>Actions</th>
+                  <td colSpan={8}>No orders found.</td>
                 </tr>
-              </thead>
-              <tbody>
-                {orders.map((order) => (
-                  <tr key={order._id}>
-                    <td>{order.invoiceNumber || "-"}</td>
-                    <td>{order.user?.email || order.user || "-"}</td>
-                    <td>{order.totalPrice}</td>
-                    <td>
-                      <select
-                        value={order.orderStatus}
-                        onChange={(e) => updateStatus(order._id, e.target.value)}
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>{order.paymentMethod}</td>
-                    <td className="row">
-                      <button className="secondary" onClick={() => assignDelivery(order._id)}>
-                        Assign Delivery
-                      </button>
-                      <button
-                        className="secondary"
-                        onClick={() => updateExpectedDelivery(order._id)}
-                      >
-                        Update Expected
-                      </button>
-                      <button className="danger" onClick={() => deleteOrder(order._id)}>
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!orders.length && (
-                  <tr>
-                    <td colSpan={6}>No orders found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </section>
   );

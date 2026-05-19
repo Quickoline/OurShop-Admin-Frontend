@@ -5,9 +5,9 @@ const navItems = [
   { path: "/", label: "Dashboard", end: true },
   { path: "/users", label: "Users" },
   { path: "/products", label: "Products" },
+  { path: "/services", label: "Services" },
   { path: "/categories", label: "Categories" },
   { path: "/brands", label: "Brands" },
-  { path: "/coupons", label: "Coupons" },
   { path: "/reviews", label: "Reviews" },
   { path: "/orders", label: "Orders" },
 ];

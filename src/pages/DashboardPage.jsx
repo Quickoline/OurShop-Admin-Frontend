@@ -2,19 +2,19 @@ import { useEffect, useState } from "react";
 import {
   brandService,
   categoryService,
-  couponService,
   orderService,
   productService,
   reviewService,
+  serviceService,
   userService,
 } from "../api/services";
 
 const cardConfig = [
   { key: "users", label: "Users", service: userService },
   { key: "products", label: "Products", service: productService },
+  { key: "services", label: "Services", service: serviceService },
   { key: "categories", label: "Categories", service: categoryService },
   { key: "brands", label: "Brands", service: brandService },
-  { key: "coupons", label: "Coupons", service: couponService },
   { key: "reviews", label: "Reviews", service: reviewService },
   { key: "orders", label: "Orders", service: orderService },
 ];
