@@ -6,6 +6,7 @@ const defaultForm = {
   description: "",
   price: "",
   priceAfterDiscount: "",
+  profitAmount: "",
   quantity: "",
   unit: "pcs",
   category: "",
@@ -234,6 +235,7 @@ const ProductsPage = () => {
       description: item.description || "",
       price: item.price ?? "",
       priceAfterDiscount: item.priceAfterDiscount ?? "",
+      profitAmount: item.profitAmount ?? "",
       quantity: item.quantity ?? "",
       unit: item.unit || "pcs",
       category: item.category?._id || item.category || "",
@@ -292,6 +294,7 @@ const ProductsPage = () => {
     payload.append("description", form.description);
     payload.append("price", String(form.price || 0));
     payload.append("priceAfterDiscount", String(form.priceAfterDiscount || 0));
+    payload.append("profitAmount", String(form.profitAmount || 0));
     payload.append("quantity", String(form.quantity || 0));
     payload.append("unit", form.unit || "pcs");
     payload.append("category", form.category);
@@ -412,6 +415,19 @@ const ProductsPage = () => {
               value={form.priceAfterDiscount}
               onChange={(e) => setForm((p) => ({ ...p, priceAfterDiscount: e.target.value }))}
             />
+          </label>
+          <label>
+            Profit Amount (per unit, MLM)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.profitAmount}
+              onChange={(e) => setForm((p) => ({ ...p, profitAmount: e.target.value }))}
+            />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Paid on delivery (products & services) · 50% admin / 50% upline
+            </span>
           </label>
           <label>
             Quantity

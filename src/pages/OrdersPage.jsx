@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { orderService } from "../api/services";
+import { orderService, walletService } from "../api/services";
 
 const statusOptions = [
   "PLACED",
@@ -34,6 +34,16 @@ const formatAddress = (address) => {
   return parts.join(" · ") || "-";
 };
 
+const orderHasCommissionableItems = (order) =>
+  Array.isArray(order.orderItems) &&
+  order.orderItems.some(
+    (item) =>
+      item.itemType === "product" ||
+      item.product ||
+      item.itemType === "service" ||
+      item.service
+  );
+
 const lineItemLabel = (item) => {
   const type = item.itemType === "service" || item.service ? "Service" : "Product";
   const title =
@@ -48,7 +58,14 @@ const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+
+  const apiMessage = (err) =>
+    err?.response?.data?.message ||
+    err?.response?.data?.details ||
+    err?.message ||
+    "Request failed";
 
   const loadOrders = async () => {
     setLoading(true);
@@ -68,11 +85,42 @@ const OrdersPage = () => {
   }, []);
 
   const updateStatus = async (orderId, orderStatus) => {
+    setError("");
+    setSuccess("");
     try {
-      await orderService.update(orderId, { orderStatus });
+      const res = await orderService.update(orderId, { orderStatus });
+      setSuccess(res?.message || "Order updated");
+      await loadOrders();
+    } catch (err) {
+      setError(apiMessage(err));
+    }
+  };
+
+  const togglePaid = async (order) => {
+    try {
+      await orderService.markPaid(order._id, !order.isPaid);
       await loadOrders();
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
+    }
+  };
+
+  const runMlmDistribution = async (orderId) => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await walletService.distributeOrder(orderId);
+      if (res?.skipped) {
+        setError(`MLM not applied: ${res.reason}`);
+        return;
+      }
+      setSuccess(
+        res?.message ||
+          `MLM distributed — profit ₹${res?.totalProfit ?? res?.data?.totalProfit ?? 0}`
+      );
+      await loadOrders();
+    } catch (err) {
+      setError(apiMessage(err));
     }
   };
 
@@ -132,10 +180,11 @@ const OrdersPage = () => {
         <button onClick={loadOrders}>Refresh</button>
       </div>
       <p className="muted" style={{ marginBottom: 12 }}>
-        Orders are placed from the storefront checkout (Razorpay). Manage status, delivery, and
-        cancellations here.
+        MLM on <strong>DELIVERED</strong>: Head = buyer; Levels 1–6 = sponsor upline only (no
+        downline). Missing upline slots → company wallet.
       </p>
       {error && <p className="error">{error}</p>}
+      {success && <p className="muted" style={{ color: "green", marginBottom: 12 }}>{success}</p>}
 
       <div className="card table-wrap">
         {loading ? (
@@ -151,6 +200,7 @@ const OrdersPage = () => {
                 <th>Status</th>
                 <th>Payment</th>
                 <th>Paid</th>
+                <th>MLM</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -188,7 +238,16 @@ const OrdersPage = () => {
                           {order.paymentMethod || "-"}
                         </span>
                       </td>
-                      <td>{order.isPaid ? "Yes" : "No"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => togglePaid(order)}
+                        >
+                          {order.isPaid ? "Paid ✓" : "Mark paid"}
+                        </button>
+                      </td>
+                      <td>{order.commissionDistributed ? "Done ✓" : "Pending"}</td>
                       <td className="row" style={{ flexWrap: "wrap" }}>
                         <button
                           type="button"
@@ -197,6 +256,17 @@ const OrdersPage = () => {
                         >
                           {expanded ? "Hide" : "Details"}
                         </button>
+                        {order.orderStatus === "DELIVERED" &&
+                          orderHasCommissionableItems(order) &&
+                          !order.commissionDistributed && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => runMlmDistribution(order._id)}
+                          >
+                            Distribute MLM
+                          </button>
+                        )}
                         {order.orderStatus !== "CANCELLED" && (
                           <button
                             type="button"
@@ -227,7 +297,7 @@ const OrdersPage = () => {
                     </tr>
                     {expanded && (
                       <tr key={`${order._id}-detail`}>
-                        <td colSpan={8}>
+                        <td colSpan={9}>
                           <div
                             style={{
                               padding: "12px 8px",
@@ -247,6 +317,12 @@ const OrdersPage = () => {
                               ))}
                               {!items.length && <li>No items</li>}
                             </ul>
+                            {order.commissionDistributed && (
+                              <p style={{ marginTop: 8 }}>
+                                <strong>MLM:</strong> distributed · profit ₹
+                                {order.mlmProfitTotal ?? 0}
+                              </p>
+                            )}
                             {(order.deliveryPartner || order.trackingId) && (
                               <p style={{ marginTop: 8 }}>
                                 <strong>Delivery:</strong> {order.deliveryPartner || "-"} ·{" "}
@@ -265,7 +341,7 @@ const OrdersPage = () => {
               })}
               {!orders.length && (
                 <tr>
-                  <td colSpan={8}>No orders found.</td>
+                  <td colSpan={9}>No orders found.</td>
                 </tr>
               )}
             </tbody>

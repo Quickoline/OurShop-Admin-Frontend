@@ -135,6 +135,16 @@ button.danger-outline {
   padding: 16px;
 }
 
+.stat-pill {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .grid-two {
   display: grid;
   grid-template-columns: 360px 1fr;

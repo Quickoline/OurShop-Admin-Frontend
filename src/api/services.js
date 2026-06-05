@@ -52,9 +52,37 @@ export const reviewService = {
   remove: (id) => api.delete(`/api/review/${id}`).then(unwrap),
 };
 
+export const walletService = {
+  getConfig: () => api.get("/api/wallet/config").then(unwrap),
+  getCompanyWallet: (params) =>
+    api.get("/api/wallet/admin/company", { params }).then(unwrap),
+  listUsers: (params) =>
+    api.get("/api/wallet/admin/users", { params }).then(unwrap),
+  adjust: (userId, payload) =>
+    api.patch(`/api/wallet/admin/users/${userId}/adjust`, payload).then(unwrap),
+  getTransactions: (userId, params) =>
+    api
+      .get(`/api/wallet/admin/users/${userId}/transactions`, { params })
+      .then(unwrap),
+  distributeOrder: (orderId) =>
+    api
+      .post(`/api/wallet/admin/orders/${orderId}/distribute`)
+      .then((r) => ({ message: r.data?.message, ...(r.data?.data || {}) })),
+};
+
 export const orderService = {
   list: () => api.get("/api/order").then(unwrap),
-  update: (id, payload) => api.put(`/api/order/${id}`, payload).then(unwrap),
+  update: (id, payload) =>
+    api.put(`/api/order/${id}`, payload).then((r) => r.data),
+  markPaid: (id, isPaid = true) =>
+    api
+      .put(`/api/order/${id}`, {
+        isPaid: Boolean(isPaid),
+        ...(isPaid
+          ? { paymentResult: { status: "success", paidAt: new Date().toISOString() } }
+          : {}),
+      })
+      .then(unwrap),
   remove: (id) => api.delete(`/api/order/${id}`).then(unwrap),
   cancel: (id) => api.patch(`/api/order/${id}/cancel`).then(unwrap),
   assignDelivery: (id, payload) =>

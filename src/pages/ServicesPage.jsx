@@ -13,6 +13,7 @@ const defaultForm = {
   description: "",
   price: "",
   priceAfterDiscount: "",
+  profitAmount: "",
   capacity: "",
   duration: "",
   unit: "session",
@@ -101,6 +102,7 @@ const ServicesPage = () => {
       description: item.description || "",
       price: item.price ?? "",
       priceAfterDiscount: item.priceAfterDiscount ?? "",
+      profitAmount: item.profitAmount ?? "",
       capacity: item.capacity ?? "",
       duration: item.duration || "",
       unit: item.unit || "session",
@@ -146,6 +148,7 @@ const ServicesPage = () => {
     payload.append("description", form.description);
     payload.append("price", String(form.price || 0));
     payload.append("priceAfterDiscount", String(form.priceAfterDiscount || 0));
+    payload.append("profitAmount", String(form.profitAmount || 0));
     payload.append("capacity", String(form.capacity || 0));
     payload.append("duration", form.duration || "");
     payload.append("unit", form.unit || "session");
@@ -254,6 +257,19 @@ const ServicesPage = () => {
               value={form.priceAfterDiscount}
               onChange={(e) => setForm((p) => ({ ...p, priceAfterDiscount: e.target.value }))}
             />
+          </label>
+          <label>
+            Profit Amount (per unit, MLM)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.profitAmount}
+              onChange={(e) => setForm((p) => ({ ...p, profitAmount: e.target.value }))}
+            />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Paid on delivery · 50% admin / 50% upline (same plan as products)
+            </span>
           </label>
           <label>
             Capacity (0 = unlimited slots)

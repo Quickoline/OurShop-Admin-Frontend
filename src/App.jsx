@@ -11,6 +11,7 @@ import ProductsPage from "./pages/ProductsPage";
 import ReviewsPage from "./pages/ReviewsPage";
 import ServicesPage from "./pages/ServicesPage";
 import UsersPage from "./pages/UsersPage";
+import WalletsPage from "./pages/WalletsPage";
 
 const App = () => {
   return (
@@ -26,6 +27,7 @@ const App = () => {
       >
         <Route index element={<DashboardPage />} />
         <Route path="users" element={<UsersPage />} />
+        <Route path="wallets" element={<WalletsPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="services" element={<ServicesPage />} />
         <Route path="categories" element={<CategoriesPage />} />
