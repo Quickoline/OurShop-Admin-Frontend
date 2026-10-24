@@ -22,12 +22,33 @@ const AdminLayout = () => {
     navigate("/login");
   };
 
+  const filteredNavItems = navItems.filter((item) => {
+    const role = user?.role;
+    if (role === "admin") return true;
+    if (role === "vendor") {
+      return ["/", "/products", "/services", "/orders"].includes(item.path);
+    }
+    if (role === "delivery") {
+      return ["/", "/orders"].includes(item.path);
+    }
+    return false;
+  });
+
+  const panelTitle =
+    user?.role === "admin"
+      ? "Super Admin"
+      : user?.role === "vendor"
+      ? "Vendor Panel"
+      : user?.role === "delivery"
+      ? "Delivery Panel"
+      : "Panel";
+
   return (
     <div className="layout">
       <aside className="sidebar">
-        <h2>Admin Panel</h2>
+        <h2>{panelTitle}</h2>
         <nav>
-          {navItems.map((item) => (
+          {filteredNavItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

@@ -14,6 +14,11 @@ const normalizeRows = (result) => {
   return [];
 };
 
+const listTotal = (result) => {
+  if (Array.isArray(result)) return result.length;
+  return result?.pagination?.totalUsers ?? result?.pagination?.total ?? normalizeRows(result).length;
+};
+
 const castForSubmit = (value, type) => {
   if (type === "number") return value === "" ? 0 : Number(value);
   if (type === "checkbox") return Boolean(value);
@@ -29,6 +34,7 @@ const castForSubmit = (value, type) => {
 
 const EntityCrudPage = ({ title, service, fields, columns, extraActions }) => {
   const [items, setItems] = useState([]);
+  const [listMeta, setListMeta] = useState({ total: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null);
@@ -40,6 +46,7 @@ const EntityCrudPage = ({ title, service, fields, columns, extraActions }) => {
     try {
       const data = await service.list();
       setItems(normalizeRows(data));
+      setListMeta({ total: listTotal(data) });
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
     } finally {
@@ -137,6 +144,26 @@ const EntityCrudPage = ({ title, service, fields, columns, extraActions }) => {
               );
             }
 
+            if (field.type === "select") {
+              return (
+                <label key={field.name}>
+                  {field.label}
+                  <select
+                    value={formData[field.name]}
+                    onChange={(e) => onChange(field.name, e.target.value)}
+                    required={field.required}
+                  >
+                    <option value="">Select...</option>
+                    {field.options?.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label || opt.name || opt.value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              );
+            }
+
             if (field.type === "textarea" || field.type === "json") {
               return (
                 <label key={field.name}>
@@ -176,7 +203,10 @@ const EntityCrudPage = ({ title, service, fields, columns, extraActions }) => {
         </form>
 
         <div className="card table-wrap">
-          <h3>{title} List</h3>
+          <h3>
+            {title} List ({items.length}
+            {listMeta.total > items.length ? ` of ${listMeta.total}` : ""})
+          </h3>
           {loading ? (
             <p>Loading...</p>
           ) : (

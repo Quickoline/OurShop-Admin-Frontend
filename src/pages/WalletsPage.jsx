@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { walletService } from "../api/services";
+import { ADMIN_LIST_LIMIT } from "../api/constants";
 
 const formatMoney = (n) => `₹${Number(n || 0).toFixed(2)}`;
 
@@ -52,7 +53,7 @@ const WalletsPage = () => {
     setLoading(true);
     setError("");
     try {
-      const data = await walletService.listUsers({ search, limit: 50 });
+      const data = await walletService.listUsers({ search, limit: ADMIN_LIST_LIMIT, page: 1 });
       setUsers(data?.users || (Array.isArray(data) ? data : []));
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
@@ -289,7 +290,9 @@ const WalletsPage = () => {
         )}
       </div>
 
-      <h2 style={{ fontSize: 18, marginBottom: 8 }}>User wallets</h2>
+      <h2 style={{ fontSize: 18, marginBottom: 8 }}>
+        User wallets ({users.length})
+      </h2>
       <p className="muted" style={{ marginBottom: 12 }}>
         View balances, MLM referral codes, and credit or debit user wallets manually.
       </p>

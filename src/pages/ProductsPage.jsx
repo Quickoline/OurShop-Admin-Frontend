@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { brandService, categoryService, productService } from "../api/services";
+import { brandService, categoryService, productService, userService } from "../api/services";
+import { useAuth } from "../context/AuthContext";
 
 const defaultForm = {
   title: "",
@@ -22,6 +23,8 @@ const defaultForm = {
   specifications: "",
   sizeOptions: "",
   isActive: true,
+  vendor: "",
+  deliveryCharges: "",
 };
 
 const UNIT_OPTIONS = ["kg", "g", "l", "ml", "pcs", "box", "bag", "bottle", "pack", "set", "other"];
@@ -171,9 +174,11 @@ const JSON_FIELDS = {
 };
 
 const ProductsPage = () => {
+  const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null);
@@ -190,14 +195,24 @@ const ProductsPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [productRows, categoryRows, brandRows] = await Promise.all([
+      const promises = [
         productService.list(),
         categoryService.list(),
         brandService.list(),
-      ]);
-      setProducts(normalizeRows(productRows));
-      setCategories(Array.isArray(categoryRows) ? categoryRows : categoryRows?.data || []);
-      setBrands(Array.isArray(brandRows) ? brandRows : brandRows?.data || []);
+      ];
+      if (user?.role === "admin") {
+        promises.push(userService.list({ role: "vendor" }));
+      }
+
+      const results = await Promise.all(promises);
+      setProducts(normalizeRows(results[0]));
+      setCategories(Array.isArray(results[1]) ? results[1] : results[1]?.data || []);
+      setBrands(Array.isArray(results[2]) ? results[2] : results[2]?.data || []);
+      
+      if (user?.role === "admin" && results[3]) {
+        const vendorList = Array.isArray(results[3]) ? results[3] : results[3]?.data || [];
+        setVendors(vendorList);
+      }
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
     } finally {
@@ -206,8 +221,10 @@ const ProductsPage = () => {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   const clearForm = () => {
     setEditing(null);
@@ -251,6 +268,8 @@ const ProductsPage = () => {
       specifications: formatSpecificationsField(item.specifications || []),
       sizeOptions: formatSizeOptionsField(item.sizeOptions || []),
       isActive: Boolean(item.isActive),
+      vendor: item.vendor?._id || item.vendor || "",
+      deliveryCharges: item.deliveryCharges ?? "",
     });
     setImgCover(null);
     setGallery([]);
@@ -310,6 +329,12 @@ const ProductsPage = () => {
     payload.append("specifications", JSON.stringify(parseJsonArrayField(form.specifications, JSON_FIELDS.specifications)));
     payload.append("sizeOptions", JSON.stringify(parseJsonArrayField(form.sizeOptions, JSON_FIELDS.sizeOptions)));
     payload.append("isActive", String(Boolean(form.isActive)));
+    if (form.vendor) {
+      payload.append("vendor", form.vendor);
+    }
+    if (form.deliveryCharges) {
+      payload.append("deliveryCharges", String(form.deliveryCharges));
+    }
 
     if (imgCover) {
       payload.append("imgCover", imgCover);
@@ -417,6 +442,17 @@ const ProductsPage = () => {
             />
           </label>
           <label>
+            Delivery Charges (Optional, ₹)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.deliveryCharges}
+              onChange={(e) => setForm((p) => ({ ...p, deliveryCharges: e.target.value }))}
+              placeholder="0.00"
+            />
+          </label>
+          <label>
             Profit Amount (per unit, MLM)
             <input
               type="number"
@@ -499,6 +535,23 @@ const ProductsPage = () => {
               ))}
             </select>
           </label>
+
+          {user?.role === "admin" && (
+            <label>
+              Vendor
+              <select
+                value={form.vendor}
+                onChange={(e) => setForm((p) => ({ ...p, vendor: e.target.value }))}
+              >
+                <option value="">Select Vendor (Super Admin)</option>
+                {vendors.map((item) => (
+                  <option key={item._id} value={item._id}>
+                    {item.name} ({item.email})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <div>
             <p>Tags</p>
@@ -685,6 +738,7 @@ const ProductsPage = () => {
                   <th>Title</th>
                   <th>Price</th>
                   <th>Qty</th>
+                  {user?.role === "admin" && <th>Vendor</th>}
                   <th>Active</th>
                   <th>Actions</th>
                 </tr>
@@ -719,6 +773,7 @@ const ProductsPage = () => {
                     <td>{item.title}</td>
                     <td>{item.price}</td>
                     <td>{item.quantity}</td>
+                    {user?.role === "admin" && <td>{item.vendor?.name || "Super Admin"}</td>}
                     <td>{String(item.isActive)}</td>
                     <td className="row">
                       <button className="secondary" onClick={() => startEdit(item)}>

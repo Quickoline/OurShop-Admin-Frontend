@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { brandService, categoryService, serviceService } from "../api/services";
+import { brandService, categoryService, serviceService, userService } from "../api/services";
+import { useAuth } from "../context/AuthContext";
 import {
   formatSpecificationsField,
   formatStringArrayField,
@@ -26,6 +27,7 @@ const defaultForm = {
   aboutItems: "",
   specifications: "",
   isActive: true,
+  vendor: "",
 };
 
 const UNIT_OPTIONS = ["session", "hour", "visit", "package", "other"];
@@ -45,9 +47,11 @@ const JSON_FIELDS = {
 };
 
 const ServicesPage = () => {
+  const { user } = useAuth();
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null);
@@ -61,14 +65,24 @@ const ServicesPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [serviceRows, categoryRows, brandRows] = await Promise.all([
+      const promises = [
         serviceService.list(),
         categoryService.list(),
         brandService.list(),
-      ]);
-      setServices(normalizeListRows(serviceRows, "services"));
-      setCategories(Array.isArray(categoryRows) ? categoryRows : categoryRows?.data || []);
-      setBrands(Array.isArray(brandRows) ? brandRows : brandRows?.data || []);
+      ];
+      if (user?.role === "admin") {
+        promises.push(userService.list({ role: "vendor" }));
+      }
+
+      const results = await Promise.all(promises);
+      setServices(normalizeListRows(results[0], "services"));
+      setCategories(Array.isArray(results[1]) ? results[1] : results[1]?.data || []);
+      setBrands(Array.isArray(results[2]) ? results[2] : results[2]?.data || []);
+
+      if (user?.role === "admin" && results[3]) {
+        const vendorList = Array.isArray(results[3]) ? results[3] : results[3]?.data || [];
+        setVendors(vendorList);
+      }
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
     } finally {
@@ -77,8 +91,10 @@ const ServicesPage = () => {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   const clearForm = () => {
     setEditing(null);
@@ -115,6 +131,7 @@ const ServicesPage = () => {
       aboutItems: formatStringArrayField(item.aboutItems || []),
       specifications: formatSpecificationsField(item.specifications || []),
       isActive: Boolean(item.isActive),
+      vendor: item.vendor?._id || item.vendor || "",
     });
     setImgCover(null);
     setGallery([]);
@@ -167,6 +184,9 @@ const ServicesPage = () => {
       JSON.stringify(parseJsonArrayField(form.specifications, JSON_FIELDS.specifications))
     );
     payload.append("isActive", String(Boolean(form.isActive)));
+    if (form.vendor) {
+      payload.append("vendor", form.vendor);
+    }
 
     if (imgCover) payload.append("imgCover", imgCover);
     gallery.forEach((file) => payload.append("images", file));
@@ -344,6 +364,23 @@ const ServicesPage = () => {
             </select>
           </label>
 
+          {user?.role === "admin" && (
+            <label>
+              Vendor
+              <select
+                value={form.vendor}
+                onChange={(e) => setForm((p) => ({ ...p, vendor: e.target.value }))}
+              >
+                <option value="">Select Vendor (Super Admin)</option>
+                {vendors.map((item) => (
+                  <option key={item._id} value={item._id}>
+                    {item.name} ({item.email})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <div>
             <p>Tags</p>
             <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 6 }}>
@@ -454,6 +491,7 @@ const ServicesPage = () => {
                   <th>Price</th>
                   <th>Capacity</th>
                   <th>Duration</th>
+                  {user?.role === "admin" && <th>Vendor</th>}
                   <th>Active</th>
                   <th>Actions</th>
                 </tr>
@@ -472,6 +510,7 @@ const ServicesPage = () => {
                     <td>{item.priceAfterDiscount ?? item.price}</td>
                     <td>{item.capacity ?? 0}</td>
                     <td>{item.duration || "-"}</td>
+                    {user?.role === "admin" && <td>{item.vendor?.name || "Super Admin"}</td>}
                     <td>{String(item.isActive)}</td>
                     <td className="row">
                       <button className="secondary" onClick={() => startEdit(item)}>

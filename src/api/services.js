@@ -1,9 +1,13 @@
 import { api } from "./http";
+import { ADMIN_LIST_LIMIT } from "./constants";
 
 const unwrap = (response) => response?.data?.data ?? response?.data;
 
 export const userService = {
-  list: () => api.get("/api/user").then(unwrap),
+  list: (params = {}) =>
+    api
+      .get("/api/user", { params: { limit: ADMIN_LIST_LIMIT, page: 1, ...params } })
+      .then(unwrap),
   create: (payload) => api.post("/api/user", payload).then(unwrap),
   update: (id, payload) => api.put(`/api/user/${id}`, payload).then(unwrap),
   remove: (id) => api.delete(`/api/user/${id}`).then(unwrap),
@@ -11,7 +15,10 @@ export const userService = {
 };
 
 export const productService = {
-  list: () => api.get("/api/product").then(unwrap),
+  list: (params = {}) =>
+    api
+      .get("/api/product", { params: { limit: ADMIN_LIST_LIMIT, page: 1, ...params } })
+      .then(unwrap),
   create: (payload) => api.post("/api/product", payload).then(unwrap),
   update: (id, payload) => api.put(`/api/product/${id}`, payload).then(unwrap),
   remove: (id) => api.delete(`/api/product/${id}`).then(unwrap),
@@ -53,6 +60,7 @@ export const reviewService = {
 };
 
 export const walletService = {
+  getMyWallet: () => api.get("/api/wallet/me").then(unwrap),
   getConfig: () => api.get("/api/wallet/config").then(unwrap),
   getCompanyWallet: (params) =>
     api.get("/api/wallet/admin/company", { params }).then(unwrap),

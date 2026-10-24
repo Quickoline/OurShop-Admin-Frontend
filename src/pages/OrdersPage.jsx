@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
-import { orderService, walletService } from "../api/services";
+import { orderService, walletService, userService } from "../api/services";
+import { useAuth } from "../context/AuthContext";
 
 const statusOptions = [
   "PLACED",
@@ -55,7 +56,9 @@ const lineItemLabel = (item) => {
 };
 
 const OrdersPage = () => {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [deliveryPartners, setDeliveryPartners] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -73,6 +76,11 @@ const OrdersPage = () => {
     try {
       const data = await orderService.list();
       setOrders(normalizeRows(data));
+      if (user?.role === "admin") {
+        const dpRows = await userService.list({ role: "delivery" });
+        const dpList = Array.isArray(dpRows) ? dpRows : dpRows?.data || [];
+        setDeliveryPartners(dpList);
+      }
     } catch (err) {
       setError(err?.response?.data?.message || err.message);
     } finally {
@@ -81,8 +89,26 @@ const OrdersPage = () => {
   };
 
   useEffect(() => {
-    loadOrders();
-  }, []);
+    if (user) {
+      loadOrders();
+    }
+  }, [user]);
+
+  const getStatusOptions = (currentStatus) => {
+    const role = user?.role;
+    let allowed = [];
+    if (role === "admin") allowed = statusOptions;
+    else if (role === "vendor") {
+      allowed = ["CONFIRMED", "PACKED", "SHIPPED", "CANCELLED"];
+    } else if (role === "delivery") {
+      allowed = ["OUT_FOR_DELIVERY", "DELIVERED"];
+    }
+    
+    if (currentStatus && !allowed.includes(currentStatus)) {
+      return [currentStatus, ...allowed];
+    }
+    return allowed;
+  };
 
   const updateStatus = async (orderId, orderStatus) => {
     setError("");
@@ -180,11 +206,12 @@ const OrdersPage = () => {
         <button onClick={loadOrders}>Refresh</button>
       </div>
       <p className="muted" style={{ marginBottom: 12 }}>
-        MLM on <strong>DELIVERED</strong>: Head = buyer; Levels 1–6 = sponsor upline only (no
-        downline). Missing upline slots → company wallet.
+        MLM on <strong>DELIVERED</strong>: 6-hop window — direct sponsor 30%, then 20/20/10/10/10.
+        Hop 7+ exits (no upline payout). Depth 7+ from head = level 6. Missing hops → company
+        wallet.
       </p>
       {error && <p className="error">{error}</p>}
-      {success && <p className="muted" style={{ color: "green", marginBottom: 12 }}>{success}</p>}
+      {success && <p className="success" style={{ color: "green", marginBottom: 12 }}>{success}</p>}
 
       <div className="card table-wrap">
         {loading ? (
@@ -198,9 +225,13 @@ const OrdersPage = () => {
                 <th>Items</th>
                 <th>Total</th>
                 <th>Status</th>
-                <th>Payment</th>
-                <th>Paid</th>
-                <th>MLM</th>
+                {user?.role === "admin" && (
+                  <>
+                    <th>Payment</th>
+                    <th>Paid</th>
+                    <th>MLM</th>
+                  </>
+                )}
                 <th>Actions</th>
               </tr>
             </thead>
@@ -220,34 +251,38 @@ const OrdersPage = () => {
                           value={order.orderStatus || "PLACED"}
                           onChange={(e) => updateStatus(order._id, e.target.value)}
                         >
-                          {statusOptions.map((status) => (
+                          {getStatusOptions(order.orderStatus).map((status) => (
                             <option key={status} value={status}>
                               {status}
                             </option>
                           ))}
                         </select>
                       </td>
-                      <td>
-                        <span
-                          className={
-                            PAYMENT_METHODS.includes(order.paymentMethod)
-                              ? ""
-                              : "error"
-                          }
-                        >
-                          {order.paymentMethod || "-"}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => togglePaid(order)}
-                        >
-                          {order.isPaid ? "Paid ✓" : "Mark paid"}
-                        </button>
-                      </td>
-                      <td>{order.commissionDistributed ? "Done ✓" : "Pending"}</td>
+                      {user?.role === "admin" && (
+                        <>
+                          <td>
+                            <span
+                              className={
+                                PAYMENT_METHODS.includes(order.paymentMethod)
+                                  ? ""
+                                  : "error"
+                              }
+                            >
+                              {order.paymentMethod || "-"}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => togglePaid(order)}
+                            >
+                              {order.isPaid ? "Paid ✓" : "Mark paid"}
+                            </button>
+                          </td>
+                          <td>{order.commissionDistributed ? "Done ✓" : "Pending"}</td>
+                        </>
+                      )}
                       <td className="row" style={{ flexWrap: "wrap" }}>
                         <button
                           type="button"
@@ -256,18 +291,18 @@ const OrdersPage = () => {
                         >
                           {expanded ? "Hide" : "Details"}
                         </button>
-                        {order.orderStatus === "DELIVERED" &&
+                        {user?.role === "admin" && order.orderStatus === "DELIVERED" &&
                           orderHasCommissionableItems(order) &&
                           !order.commissionDistributed && (
                           <button
                             type="button"
                             className="secondary"
-                            onClick={() => runMlmDistribution(order._id)}
+                            onClick={() => distributeCommission(order._id)}
                           >
-                            Distribute MLM
+                            Wallet Dist.
                           </button>
                         )}
-                        {order.orderStatus !== "CANCELLED" && (
+                        {order.orderStatus !== "CANCELLED" && (user?.role === "admin" || user?.role === "vendor") && (
                           <button
                             type="button"
                             className="secondary"
@@ -276,28 +311,34 @@ const OrdersPage = () => {
                             Cancel
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => assignDelivery(order._id)}
-                        >
-                          Delivery
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => updateExpectedDelivery(order._id)}
-                        >
-                          ETA
-                        </button>
-                        <button type="button" className="danger" onClick={() => deleteOrder(order._id)}>
-                          Delete
-                        </button>
+                        {user?.role === "admin" && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => assignDelivery(order._id)}
+                          >
+                            Delivery
+                          </button>
+                        )}
+                        {(user?.role === "admin" || user?.role === "delivery") && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => updateExpectedDelivery(order._id)}
+                          >
+                            ETA
+                          </button>
+                        )}
+                        {user?.role === "admin" && (
+                          <button type="button" className="danger" onClick={() => deleteOrder(order._id)}>
+                            Delete
+                          </button>
+                        )}
                       </td>
                     </tr>
                     {expanded && (
                       <tr key={`${order._id}-detail`}>
-                        <td colSpan={9}>
+                        <td colSpan={user?.role === "admin" ? 9 : 6}>
                           <div
                             style={{
                               padding: "12px 8px",
@@ -330,7 +371,130 @@ const OrdersPage = () => {
                                 {order.expectedDeliveryDate
                                   ? ` · ETA ${new Date(order.expectedDeliveryDate).toLocaleDateString()}`
                                   : ""}
+                                {order.deliveryPartnerEarning
+                                  ? ` · Earning ₹${order.deliveryPartnerEarning}`
+                                  : ""}
                               </p>
+                            )}
+                            
+                            {user?.role === "vendor" && order.assignedDeliveryPartner && (
+                              <div
+                                style={{
+                                  marginTop: 12,
+                                  padding: 12,
+                                  border: "1px solid var(--border, #e2e8f0)",
+                                  borderRadius: 6,
+                                  background: "#ffffff",
+                                }}
+                              >
+                                <h4 style={{ marginBottom: 8 }}>Delivery Partner Earning</h4>
+                                <form
+                                  onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const formData = new FormData(e.currentTarget);
+                                    const earning = formData.get("deliveryPartnerEarning");
+                                    if (earning === null || earning === "") return;
+                                    
+                                    setError("");
+                                    setSuccess("");
+                                    try {
+                                      await orderService.update(order._id, {
+                                        deliveryPartnerEarning: Number(earning),
+                                      });
+                                      setSuccess("Delivery partner earning updated and wallet credited!");
+                                      await loadOrders();
+                                    } catch (err) {
+                                      setError(apiMessage(err));
+                                    }
+                                  }}
+                                >
+                                  <div className="row" style={{ gap: 12, alignItems: "flex-end" }}>
+                                    <label style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                                      Earning Amount (₹):
+                                      <input
+                                        type="number"
+                                        name="deliveryPartnerEarning"
+                                        required
+                                        min="0"
+                                        step="0.01"
+                                        defaultValue={order.deliveryPartnerEarning || ""}
+                                        style={{ marginTop: 4 }}
+                                      />
+                                    </label>
+                                    <button type="submit" style={{ height: 38, padding: "0 16px" }}>Save Earning</button>
+                                  </div>
+                                </form>
+                              </div>
+                            )}
+
+                            {user?.role === "vendor" && !order.assignedDeliveryPartner && (
+                              <p style={{ marginTop: 8, color: "var(--foreground-muted, #64748b)", fontSize: "14px" }}>
+                                * No delivery partner assigned to this order yet.
+                              </p>
+                            )}
+                            
+                            {user?.role === "admin" && (
+                              <div
+                                style={{
+                                  marginTop: 12,
+                                  padding: 12,
+                                  border: "1px solid var(--border, #e2e8f0)",
+                                  borderRadius: 6,
+                                  background: "#ffffff",
+                                }}
+                              >
+                                <h4 style={{ marginBottom: 8 }}>Assign Delivery Partner</h4>
+                                <form
+                                  onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const formData = new FormData(e.currentTarget);
+                                    const dpId = formData.get("assignedDeliveryPartner");
+                                    const tracking = formData.get("trackingId");
+                                    const eta = formData.get("expectedDeliveryDate");
+                                    if (!dpId || !tracking || !eta) return;
+                                    
+                                    const selectedPartner = deliveryPartners.find((p) => p._id === dpId);
+                                    
+                                    setError("");
+                                    setSuccess("");
+                                    try {
+                                      await orderService.assignDelivery(order._id, {
+                                        deliveryPartner: selectedPartner ? selectedPartner.name : "Partner",
+                                        trackingId: tracking,
+                                        expectedDeliveryDate: eta,
+                                        assignedDeliveryPartner: dpId,
+                                      });
+                                      setSuccess("Delivery details assigned successfully!");
+                                      await loadOrders();
+                                    } catch (err) {
+                                      setError(apiMessage(err));
+                                    }
+                                  }}
+                                >
+                                  <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                                    <label style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column" }}>
+                                      Delivery Partner:
+                                      <select name="assignedDeliveryPartner" required defaultValue={order.assignedDeliveryPartner?._id || order.assignedDeliveryPartner || ""} style={{ marginTop: 4 }}>
+                                        <option value="">Select Delivery Partner...</option>
+                                        {deliveryPartners.map((p) => (
+                                          <option key={p._id} value={p._id}>
+                                            {p.name} ({p.email})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label style={{ flex: 1, minWidth: 150, display: "flex", flexDirection: "column" }}>
+                                      Tracking ID:
+                                      <input type="text" name="trackingId" required defaultValue={order.trackingId || ""} style={{ marginTop: 4 }} />
+                                    </label>
+                                    <label style={{ flex: 1, minWidth: 150, display: "flex", flexDirection: "column" }}>
+                                      ETA (YYYY-MM-DD):
+                                      <input type="date" name="expectedDeliveryDate" required defaultValue={order.expectedDeliveryDate ? String(order.expectedDeliveryDate).slice(0, 10) : ""} style={{ marginTop: 4 }} />
+                                    </label>
+                                    <button type="submit" style={{ height: 38, padding: "0 16px" }}>Save</button>
+                                  </div>
+                                </form>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -341,7 +505,7 @@ const OrdersPage = () => {
               })}
               {!orders.length && (
                 <tr>
-                  <td colSpan={9}>No orders found.</td>
+                  <td colSpan={user?.role === "admin" ? 9 : 6}>No orders found.</td>
                 </tr>
               )}
             </tbody>
